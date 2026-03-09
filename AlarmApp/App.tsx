@@ -13,6 +13,14 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 
+// local
+import SOUND from "./Sound.tsx"
+import {
+  SECOND,
+  get_interval_time
+} from "./Time.tsx"
+
+
 interface AlarmSet {
   id: string;
   start: string;           
@@ -22,11 +30,28 @@ interface AlarmSet {
   active: boolean;
 }
 
+
+function check_time(current_time: Date, alarm_time: Date): boolean {
+  let CT: Date = current_time;    // current time
+  let AT: Date = alarm_time;      // alarm time
+
+  // alarm should go off when both times match
+  if(CT.getHours() === AT.getHours()){
+    if(CT.getMinutes() === AT.getMinutes()){
+      return true;
+    }
+  }
+
+  // the alarm should NOT go off when they are different
+  return false;
+}
+
+
 export default function App() {
-  const [alarms, setAlarms] = useState<AlarmSet[]>([]);
+  const [alarms,    setAlarms]    = useState<AlarmSet[]>([]);
   const [startTime, setStartTime] = useState<Date>(new Date());
-  const [alarmSet, setAlarmSet] = useState<boolean>(false);
-  const [endTime, setEndTime] = useState<Date>(() => {
+  const [alarmSet,  setAlarmSet]  = useState<boolean>(false);
+  const [endTime,   setEndTime]   = useState<Date>(() => {
     const d = new Date();
     d.setHours(d.getHours() + 1);
     return d;
@@ -37,22 +62,67 @@ export default function App() {
   const [showEndPicker, setShowEndPicker] = useState<boolean>(false);
   const [showIntervalPicker, setShowIntervalPicker] = useState<boolean>(false);
 
+
+  // setup alarm sound, and target alarm interval
+  const alarm_sound: SOUND     = new SOUND("mgs_codec.mp3");
+  let   alarm_interval: number = 1
+  let   targetTime: Date       = get_interval_time(startTime, intervalMinutes, alarm_interval);
+
   // check every second
   useEffect(() => {
     const interval = setInterval(() => {
       if (!alarmSet) return;
 
       const now = new Date();
-      // when current time == alarm time, Wake up!!!
-      if (now.getHours() === endTime.getHours() && now.getMinutes() === endTime.getMinutes() && now.getSeconds() === 0)
-      {
-        Alert.alert("Alarm!!!!");
-        setAlarmSet(false);
-      }
-    }, 1000);
 
-    return () => clearInterval(interval);
-  }, [endTime, alarmSet]);
+      // DEBUG STATEMENT FOR CHECKING ALARM TIMES
+      console.log(
+        " NOW: "  + (now.getHours().toString()        + ":" + now.getMinutes().toString()), 
+        " STRT: " + (startTime.getHours().toString()  + ":" + startTime.getMinutes().toString()),
+        " TARG: " + (targetTime.getHours().toString() + ":" + targetTime.getMinutes().toString()),
+        " END: "  + (endTime.getHours().toString()    + ":" + endTime.getMinutes().toString())
+      );
+
+      // check if alarm should ring
+      if (check_time(now, targetTime) == true){
+        // alarm notification, play sound
+        alarm_sound.play();
+        Alert.alert(
+          // messages
+          "Wake up!!!",
+          "",
+          // buttons
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                // stop alarm
+                console.log("DEBUG] Alert - 'OK' pressed");
+                alarm_sound.stop();
+              }
+            },
+            {
+              text: "SNOOZE",
+              onPress: () => {
+                // stop alarm
+                console.log("DEBUG] Alert - 'SNOOZE' pressed");
+                alarm_sound.stop();
+              }
+            }
+          ],
+          // options
+          { cancelable: false }
+        );
+        setAlarmSet(false);
+
+        // update target time for next alarm interval
+        alarm_interval += 1;
+        targetTime = get_interval_time(startTime, intervalMinutes, alarm_interval);
+      }
+    }, SECOND);
+
+    //return () => clearInterval(interval); -- BLOCKED NEXT ALARM IN REPEATING ALARMS
+  }, [targetTime, alarmSet]);
 
   const CreateIntervalAlarms = () => {
     let current = new Date(startTime);
@@ -69,7 +139,7 @@ export default function App() {
     const newAlarmSet: AlarmSet = {
       id: Date.now().toString(),
       start: startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      end: endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      end: endTime.toLocaleTimeString([],     { hour: '2-digit', minute: '2-digit' }),
       interval: intervalMinutes,
       count,
       active: true,
@@ -77,7 +147,7 @@ export default function App() {
 
     setAlarms((prev) => [...prev, newAlarmSet]);
     setAlarmSet(true); // for useEffect
-    Alert.alert('Alarms Created!', `${count} alarms would be scheduled!`);
+    //Alert.alert('Alarms Created!', `${count} alarms would be scheduled!`);
   };
 
   const toggleAlarmSet = (id: string) => {
