@@ -81,7 +81,7 @@ export default function App() {
       count++;
       current = new Date(current.getTime() + intervalMs);
     }
-
++++
     // {/*set alarm*/} //should not be in CreateIntervalAlarms
     const newAlarmSet: AlarmSet = {
       id: Date.now().toString(),
