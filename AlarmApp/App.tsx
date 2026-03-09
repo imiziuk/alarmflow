@@ -25,34 +25,25 @@ interface AlarmSet {
 export default function App() {
   const [alarms, setAlarms] = useState<AlarmSet[]>([]);
   const [startTime, setStartTime] = useState<Date>(new Date());
-  const [alarmSet, setAlarmSet] = useState<boolean>(false);
   const [endTime, setEndTime] = useState<Date>(() => {
     const d = new Date();
     d.setHours(d.getHours() + 1);
     return d;
   });
   const [intervalMinutes, setIntervalMinutes] = useState<number>(10);
-
   const [showStartPicker, setShowStartPicker] = useState<boolean>(false);
   const [showEndPicker, setShowEndPicker] = useState<boolean>(false);
   const [showIntervalPicker, setShowIntervalPicker] = useState<boolean>(false);
 
+    //guard against overlapping alarms
+    const lastFiredRef = React.useRef<Record<string, string>>({});
+
   // check every second
   useEffect(() => {
     const interval = setInterval(() => {
-      //if (!alarmSet) return;
       const now = new Date();
-
       const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      /* Relies on endTime check to ring, cannot check a list of times
-      // when current time == alarm time, Wake up!!!
-      if (now.getHours() === endTime.getHours() && now.getMinutes() === endTime.getMinutes() && now.getSeconds() === 0)
-      {
-        Alert.alert("Alarm!!!!");
-        setAlarmSet(false);
-      }
-     */
      for(const set of alarms){
          if(!set.active) continue;
 
@@ -60,18 +51,24 @@ export default function App() {
          if(now.getSeconds() !== 0) continue;
 
          if(nowStr === set.end){
-             Alert.alert("Alarm!!!!", `Alarm set ended at ${set.end}`);
 
-             setAlarms(prev =>
-                prev.map(a => (a.id === set.id ? { ...a, active: false } : a))
-             );
-         }
+             //checks the date so that alarm can fire each day
+             const minuteKey = `${now.toDateString()} ${now.getHours()}:${now.getMinutes()}`;
+
+             //guards against overlapping alarms and re-firing within the same minute
+             if (lastFiredRef.current[set.id] !== minuteKey) {
+                 lastFiredRef.current[set.id] = minuteKey;
+                   Alert.alert("Alarm!!!!", `Alarm set ended at ${set.end}`);
+
+             //option to turn off batch after endtime ring
+             //setAlarms(prev => prev.map(a => (a.id === set.id ? { ...a, active: false } : a)) );
+            }
+        }
      }
     }, 1000);
 
 
     return () => clearInterval(interval);
-  //}, [endTime, alarmSet]);
   },[alarms]);
 
   const CreateIntervalAlarms = () => {
@@ -96,7 +93,6 @@ export default function App() {
     };
 
     setAlarms((prev) => [...prev, newAlarmSet]);
-    setAlarmSet(true); // for useEffect
     Alert.alert('Alarms Created!', `${count} alarms would be scheduled!`);
   };
 
