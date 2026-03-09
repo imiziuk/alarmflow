@@ -40,19 +40,39 @@ export default function App() {
   // check every second
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!alarmSet) return;
-
+      //if (!alarmSet) return;
       const now = new Date();
+
+      const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      /* Relies on endTime check to ring, cannot check a list of times
       // when current time == alarm time, Wake up!!!
       if (now.getHours() === endTime.getHours() && now.getMinutes() === endTime.getMinutes() && now.getSeconds() === 0)
       {
         Alert.alert("Alarm!!!!");
         setAlarmSet(false);
       }
+     */
+     for(const set of alarms){
+         if(!set.active) continue;
+
+         //fire only once per minute to avoid overlapping alarms
+         if(now.getSeconds() !== 0) continue;
+
+         if(nowStr === set.end){
+             Alert.alert("Alarm!!!!", `Alarm set ended at ${set.end}`);
+
+             setAlarms(prev =>
+                prev.map(a => (a.id === set.id ? { ...a, active: false } : a))
+             );
+         }
+     }
     }, 1000);
 
+
     return () => clearInterval(interval);
-  }, [endTime, alarmSet]);
+  //}, [endTime, alarmSet]);
+  },[alarms]);
 
   const CreateIntervalAlarms = () => {
     let current = new Date(startTime);
@@ -65,7 +85,7 @@ export default function App() {
       current = new Date(current.getTime() + intervalMs);
     }
 
-    {/*set alarm*/}
+    // {/*set alarm*/} //should not be in CreateIntervalAlarms
     const newAlarmSet: AlarmSet = {
       id: Date.now().toString(),
       start: startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
