@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -95,6 +96,41 @@ export default function App() {
 
     return () => clearInterval(interval);
   },[alarms]);
+
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // save alarms
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const saveAlarms = async () => {
+      try { // save to alarms set
+        await AsyncStorage.setItem('ALARMS', JSON.stringify(alarms));
+      } catch (e) {
+        console.log('Failed to save alarms', e);
+      }
+    };
+
+    saveAlarms();
+  }, [alarms, isLoaded]);
+
+  // load alarms
+  useEffect(() => {
+    const loadAlarms = async () => {
+      try { // load stored alarms set
+        const stored = await AsyncStorage.getItem('ALARMS');
+        if (stored !== null) {
+          setAlarms(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.log('Failed to load alarms', e);
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+
+    loadAlarms();
+  }, []);
 
   const CreateIntervalAlarms = () => {
     let current = new Date(startTime);
