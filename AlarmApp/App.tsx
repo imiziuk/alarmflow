@@ -85,9 +85,6 @@ export default function App() {
              if (lastFiredRef.current[set.id] !== minuteKey) {
                  lastFiredRef.current[set.id] = minuteKey;
                    Alert.alert("Alarm!!!!", `Alarm set ended at ${set.end}`);
-
-             //option to turn off batch after endtime ring
-             //setAlarms(prev => prev.map(a => (a.id === set.id ? { ...a, active: false } : a)) );
             }
         }
      }
@@ -157,18 +154,13 @@ export default function App() {
     Alert.alert('Alarms Created!', `${count} alarms would be scheduled!`);
   };
 
+// Issues here -  something with ID string/integers.
   const toggleAlarmSet = (id: string) => {
     setAlarms((prev) =>
       prev.map((a) => (a.id === id ? { ...a, active: !a.active } : a))
     );
   };
 
-/*
-  const deleteAlarmSet = (id: string) => {
-    setAlarms((prev) => prev.filter((a) => a.id !== id));
-    Alert.alert('Deleted', 'Alarm set removed (simulation)');
-  };
-*/
 
 const confirmDeleteAlarmSet = (id: string) => {
     Alert.alert(
@@ -182,7 +174,6 @@ const confirmDeleteAlarmSet = (id: string) => {
                 style: "destructive",
                 onPress: () => {
                   setAlarms(prev => prev.filter(a => a.id !== id));
-                  Alert.alert("Deleted", "Alarm set removed.")
                 },
             },
         ],
@@ -204,7 +195,6 @@ const confirmDeleteAlarmSet = (id: string) => {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.alarmItem}
-            //onLongPress={() => confirmDeleteAlarmSet(item.id)}
           >
             <Switch
               value={item.active}
