@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -13,6 +14,14 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 import styles from "./styles.js"
 
+// local
+import SOUND from "./Sound.tsx"
+import {
+  SECOND,
+  get_interval_time
+} from "./Time.tsx"
+
+
 interface AlarmSet {
   id: string;
   start: string;           
@@ -22,8 +31,25 @@ interface AlarmSet {
   active: boolean;
 }
 
+
+function check_time(current_time: Date, alarm_time: Date): boolean {
+  let CT: Date = current_time;    // current time
+  let AT: Date = alarm_time;      // alarm time
+
+  // alarm should go off when both times match
+  if(CT.getHours() === AT.getHours()){
+    if(CT.getMinutes() === AT.getMinutes()){
+      return true;
+    }
+  }
+
+  // the alarm should NOT go off when they are different
+  return false;
+}
+
+
 export default function App() {
-  const [alarms, setAlarms] = useState<AlarmSet[]>([]);
+  const [alarms,    setAlarms]    = useState<AlarmSet[]>([]);
   const [startTime, setStartTime] = useState<Date>(new Date());
   const [endTime, setEndTime] = useState<Date>(() => {
     const d = new Date();
@@ -55,20 +81,52 @@ export default function App() {
           //checks the date so that alarm can fire each day
           const minuteKey = `${now.toDateString()} ${now.getHours()}:${now.getMinutes()}`;
 
-          //guards against overlapping alarms and re-firing within the same minute
-          if (lastFiredRef.current[set.id] !== minuteKey) {
-            lastFiredRef.current[set.id] = minuteKey;
-            Alert.alert("Alarm!!!!", `Alarm set ended at ${set.end}`);
-
-            //option to turn off batch after endtime ring
-            //setAlarms(prev => prev.map(a => (a.id === set.id ? { ...a, active: false } : a)) );
-          }
+             //guards against overlapping alarms and re-firing within the same minute
+             if (lastFiredRef.current[set.id] !== minuteKey) {
+                 lastFiredRef.current[set.id] = minuteKey;
+                   Alert.alert("Alarm!!!!", `Alarm set ended at ${set.end}`);
+            }
         }
       }
     }, 1000);
 
     return () => clearInterval(interval);
   }, [alarms]);
+
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // save alarms
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const saveAlarms = async () => {
+      try { // save to alarms set
+        await AsyncStorage.setItem('ALARMS', JSON.stringify(alarms));
+      } catch (e) {
+        console.log('Failed to save alarms', e);
+      }
+    };
+
+    saveAlarms();
+  }, [alarms, isLoaded]);
+
+  // load alarms
+  useEffect(() => {
+    const loadAlarms = async () => {
+      try { // load stored alarms set
+        const stored = await AsyncStorage.getItem('ALARMS');
+        if (stored !== null) {
+          setAlarms(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.log('Failed to load alarms', e);
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+
+    loadAlarms();
+  }, []);
 
   const CreateIntervalAlarms = () => {
     let current = new Date(startTime);
@@ -85,7 +143,7 @@ export default function App() {
     const newAlarmSet: AlarmSet = {
       id: Date.now().toString(),
       start: startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      end: endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      end: endTime.toLocaleTimeString([],     { hour: '2-digit', minute: '2-digit' }),
       interval: intervalMinutes,
       count,
       active: true,
@@ -95,32 +153,33 @@ export default function App() {
     Alert.alert('Alarms Created!', `${count} alarms would be scheduled!`);
   };
 
+// Issues here -  something with ID string/integers.
   const toggleAlarmSet = (id: string) => {
     setAlarms((prev) =>
       prev.map((a) => (a.id === id ? { ...a, active: !a.active } : a))
     );
   };
 
-  const confirmDeleteAlarmSet = (id: string) => {
+
+const confirmDeleteAlarmSet = (id: string) => {
     Alert.alert(
-      "Delete alarm set?",
-      "This will remove entire batch.",
-      [
-        {
-          text: "Cancel", style: "cancel"
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            setAlarms(prev => prev.filter(a => a.id !== id));
-            Alert.alert("Deleted", "Alarm set removed.")
-          },
-        },
-      ],
-      { cancelable: true }
-    );
-  };
+        "Delete alarm set?",
+        "This will remove entire batch.",
+        [
+            {
+                text: "Cancel", style: "cancel"},
+            {
+                text: "Delete",
+                style: "destructive",
+                onPress: () => {
+                  setAlarms(prev => prev.filter(a => a.id !== id));
+                },
+            },
+        ],
+        {cancelable: true}
+      );
+
+    };
 
   const intervalOptions = [1, 2, 3, 5, 10, 15, 20, 30];
 
