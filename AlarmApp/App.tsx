@@ -7,7 +7,6 @@ import {
   FlatList,
   TouchableOpacity,
   Switch,
-  StyleSheet,
   Alert,
   Platform,
 } from 'react-native';
@@ -62,8 +61,8 @@ export default function App() {
   const [showEndPicker, setShowEndPicker] = useState<boolean>(false);
   const [showIntervalPicker, setShowIntervalPicker] = useState<boolean>(false);
 
-    //guard against overlapping alarms
-    const lastFiredRef = React.useRef<Record<string, string>>({});
+  //guard against overlapping alarms
+  const lastFiredRef = React.useRef<Record<string, string>>({});
 
   // check every second
   useEffect(() => {
@@ -71,16 +70,16 @@ export default function App() {
       const now = new Date();
       const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-     for(const set of alarms){
-         if(!set.active) continue;
+      for (const set of alarms) {
+        if (!set.active) continue;
 
-         //fire only once per minute to avoid overlapping alarms
-         if(now.getSeconds() !== 0) continue;
+        //fire only once per minute to avoid overlapping alarms
+        if (now.getSeconds() !== 0) continue;
 
-         if(nowStr === set.end){
+        if (nowStr === set.end) {
 
-             //checks the date so that alarm can fire each day
-             const minuteKey = `${now.toDateString()} ${now.getHours()}:${now.getMinutes()}`;
+          //checks the date so that alarm can fire each day
+          const minuteKey = `${now.toDateString()} ${now.getHours()}:${now.getMinutes()}`;
 
              //guards against overlapping alarms and re-firing within the same minute
              if (lastFiredRef.current[set.id] !== minuteKey) {
@@ -88,12 +87,11 @@ export default function App() {
                    Alert.alert("Alarm!!!!", `Alarm set ended at ${set.end}`);
             }
         }
-     }
+      }
     }, 1000);
 
-
     return () => clearInterval(interval);
-  },[alarms]);
+  }, [alarms]);
 
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -204,15 +202,17 @@ const confirmDeleteAlarmSet = (id: string) => {
             {/* summarized alarm text */}
             <Text style={styles.alarmText}>
               Start Time: {item.start} {'\n'}
-               End Time: {item.end} {'\n'}
-               Interval: {item.interval} min 
+              End Time: {item.end} {'\n'}
+              Interval: {item.interval} min
             </Text>
-            <TouchableOpacity //nested TouchableOpacity could conflict with onPress
-            onPress={() => confirmDeleteAlarmSet(item.id)}
-            style={styles.deleteButton}
-            >
-            <Text style={styles.deleteButtonText}>Delete</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => confirmDeleteAlarmSet(item.id)}
+                style={styles.deleteButton}
+              >
+                <Text style={styles.deleteButtonText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
           </TouchableOpacity>
         )}
         ListEmptyComponent={<Text style={styles.emptyText}>No alarms yet</Text>}
@@ -221,25 +221,27 @@ const confirmDeleteAlarmSet = (id: string) => {
       {/*Start time picker*/}
       <View style={styles.summary}>
         <Text style={styles.summaryLabel}>Start Time</Text>
-        <Text style={styles.timeText}>
-          {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </Text>
         <TouchableOpacity onPress={() => setShowStartPicker(true)}>
-          <Text style={styles.clickable}>Change Start</Text>
+          <Text style={styles.timeText}>
+            {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
         </TouchableOpacity>
+
         {/* end time picker */}
         <Text style={styles.summaryLabel}>End Time</Text>
-        <Text style={styles.timeText}>
-          {endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </Text>
         <TouchableOpacity onPress={() => setShowEndPicker(true)}>
-          <Text style={styles.clickable}>Change End</Text>
+          <Text style={styles.timeText}>
+            {endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
         </TouchableOpacity>
+
         {/* interval picker */}
         <Text style={styles.summaryLabel}>Interval</Text>
-        <Text style={styles.timeText}>Every {intervalMinutes} minutes</Text>
-        <TouchableOpacity onPress={() => setShowIntervalPicker(true)}>
-          <Text style={styles.clickable}>Change Interval</Text>
+        <TouchableOpacity
+          onPress={() => setShowIntervalPicker(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.timeText}>Every {intervalMinutes} minutes</Text>
         </TouchableOpacity>
       </View>
 
@@ -285,7 +287,7 @@ const confirmDeleteAlarmSet = (id: string) => {
                 setShowIntervalPicker(false);
               }}
             >
-              <Text style={{ fontSize: 18 }}>{min} minutes</Text>
+              <Text style={styles.intervalText}>{min} minutes</Text>
             </TouchableOpacity>
           ))}
           <TouchableOpacity
