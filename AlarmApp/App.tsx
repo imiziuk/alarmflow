@@ -17,14 +17,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 import styles from "./styles.js"
 
-// local
-import SOUND from "./Sound.tsx"
-import {
-  SECOND,
-  get_interval_time
-} from "./Time.tsx"
-
-
 import {
   createAlarmChannel,
   requestAlarmPermissions,
@@ -32,6 +24,7 @@ import {
   cancelAlarmSet,
   registerForegroundHandler,
 } from './AlarmScheduler';
+
 
 interface AlarmSet {
   id: string;
@@ -43,36 +36,23 @@ interface AlarmSet {
   notificationIds?: string[]; // Added for OS scheduling
 }
 
-function check_time(current_time: Date, alarm_time: Date): boolean {
-  let CT: Date = current_time;    // current time
-  let AT: Date = alarm_time;      // alarm time
-
-  // alarm should go off when both times match
-  if(CT.getHours() === AT.getHours()){
-    if(CT.getMinutes() === AT.getMinutes()){
-      return true;
-    }
-  }
-
-  // the alarm should NOT go off when they are different
-  return false;
-}
-
-
 interface EditModalProps {
   visible: boolean;
   initialStart: Date;
   initialEnd: Date;
   initialInterval: number;
+  use24Hour: boolean;        
   onSave: (start: Date, end: Date, interval: number) => void;
   onCancel: () => void;
 }
+
 
 function EditModal({
   visible,
   initialStart,
   initialEnd,
   initialInterval,
+  use24Hour,               
   onSave,
   onCancel,
 }: EditModalProps) {
@@ -98,6 +78,11 @@ function EditModal({
   }, [visible, initialStart, initialEnd, initialInterval]);
 
   const intervalOptions = [1, 2, 3, 5, 10, 15, 20, 30];
+
+  // the options for the slider
+  const timeLocaleOpts = use24Hour
+    ? { hour: '2-digit' as const, minute: '2-digit' as const, hour12: false }
+    : { hour: '2-digit' as const, minute: '2-digit' as const };
 
   return (
   <Modal
@@ -128,7 +113,7 @@ function EditModal({
               }}
             >
               <Text style={styles.editInputText}>
-                {modalStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {modalStart.toLocaleTimeString([], timeLocaleOpts)}
               </Text>
             </TouchableOpacity>
 
@@ -136,7 +121,7 @@ function EditModal({
               <DateTimePicker
                 value={modalStart}
                 mode="time"
-                is24Hour={false}
+                is24Hour={use24Hour}
                 onChange={(event, selectedDate) => {
                   setShowStartPicker(Platform.OS === 'ios');
                   if (selectedDate) setModalStart(selectedDate);
@@ -155,7 +140,7 @@ function EditModal({
               }}
             >
               <Text style={styles.editInputText}>
-                {modalEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {modalEnd.toLocaleTimeString([], timeLocaleOpts)}
               </Text>
             </TouchableOpacity>
 
@@ -163,7 +148,7 @@ function EditModal({
               <DateTimePicker
                 value={modalEnd}
                 mode="time"
-                is24Hour={false}
+                is24Hour={use24Hour}
                 onChange={(event, selectedDate) => {
                   setShowEndPicker(Platform.OS === 'ios');
                   if (selectedDate) setModalEnd(selectedDate);
@@ -253,14 +238,91 @@ export default function App() {
   const [showIntervalPicker, setShowIntervalPicker] = useState<boolean>(false);
   const [editingAlarmId, setEditingAlarmId] = useState<string | null>(null);
 
-  // NEW: store the full alarm object being edited so the modal has its values.
+  // store the full alarm object being edited 
   // null means the modal is closed.
   const [editingAlarm, setEditingAlarm] = useState<AlarmSet | null>(null);
+
+  // 24hour  toggle
+  const [use24Hour, setUse24Hour] = useState<boolean>(false);
+
+  const timeLocaleOpts = use24Hour
+    ? { hour: '2-digit' as const, minute: '2-digit' as const, hour12: false }
+    : { hour: '2-digit' as const, minute: '2-digit' as const };
 
   //guard against overlapping alarms
   const lastFiredRef = React.useRef<Record<string, string>>({});
 
-  const [isLoaded, setIsLoaded] = useState(false);
+  // helper. parses a stored time string ("02:30 PM" or "14:30") into a Date
+  const parseTimeString = (t: string): Date | null => {
+    const parts = t.match(/(\d+):(\d+)\s?(AM|PM)?/i);
+    if (!parts) return null;
+    let h = Number(parts[1]);
+    const m = Number(parts[2]);
+    const p = parts[3]?.toUpperCase();
+    if (p === 'PM' && h !== 12) h += 12;
+    if (p === 'AM' && h === 12) h = 0;
+    const d = new Date(); d.setHours(h, m, 0, 0); return d;
+  };
+
+  // changes all existing alarm when switching modes
+  const toggleUse24Hour = (val: boolean) => {
+    const newOpts = val
+      ? { hour: '2-digit' as const, minute: '2-digit' as const, hour12: false }
+      : { hour: '2-digit' as const, minute: '2-digit' as const };
+    setAlarms((prev) =>
+      prev.map((a) => {
+        const startDate = parseTimeString(a.start);
+        const endDate   = parseTimeString(a.end);
+        return {
+          ...a,
+          start: startDate ? startDate.toLocaleTimeString([], newOpts) : a.start,
+          end:   endDate   ? endDate.toLocaleTimeString([],   newOpts) : a.end,
+        };
+      })
+    );
+    setUse24Hour(val);
+  };
+
+  // load 24h preference
+  useEffect(() => {
+    AsyncStorage.getItem('USE_24_HOUR').then((val) => {
+      if (val !== null) setUse24Hour(val === 'true');
+    });
+  }, []);
+
+  // save 24h preference whenever it changes
+  useEffect(() => {
+    AsyncStorage.setItem('USE_24_HOUR', String(use24Hour));
+  }, [use24Hour]);
+
+  // check every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      for (const set of alarms) {
+        if (!set.active) continue;
+
+        //fire only once per minute to avoid overlapping alarms
+        if (now.getSeconds() !== 0) continue;
+
+        if (nowStr === set.end) {
+
+          //checks the date so that alarm can fire each day
+          const minuteKey = `${now.toDateString()} ${now.getHours()}:${now.getMinutes()}`;
+
+             //guards against overlapping alarms and re-firing within the same minute
+             if (lastFiredRef.current[set.id] !== minuteKey) {
+                 lastFiredRef.current[set.id] = minuteKey;
+                   Alert.alert("Alarm!!!!", `Alarm set ended at ${set.end}`);
+            }
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [alarms]);
 
 
   useEffect(() => {
@@ -321,8 +383,8 @@ export default function App() {
 
     const newAlarmSet: AlarmSet = {
       id: Date.now().toString(),
-      start: startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      end: endTime.toLocaleTimeString([],     { hour: '2-digit', minute: '2-digit' }),
+      start: startTime.toLocaleTimeString([], timeLocaleOpts),
+      end: endTime.toLocaleTimeString([],     timeLocaleOpts),
       interval: intervalMinutes,
       count,
       active: true,
@@ -378,7 +440,7 @@ export default function App() {
     setEndTime(end);
     setIntervalMinutes(alarm.interval);
 
-    // NEW: also open the modal with this alarm's values
+    // also open the modal with this alarm's values
     setEditingAlarm(alarm);
   };
 
@@ -400,8 +462,8 @@ export default function App() {
         a.id === editingAlarmId
           ? {
               ...a,
-              start: startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              end: endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              start: startTime.toLocaleTimeString([], timeLocaleOpts),
+              end: endTime.toLocaleTimeString([], timeLocaleOpts),
               interval: intervalMinutes,
               count,
             }
@@ -413,7 +475,7 @@ export default function App() {
     Alert.alert("Updated", "Alarm set updated.");
   };
 
-  // NEW: modal save — receives the updated values directly from the modal's local state
+  // modal save 
   const saveEditAlarmSetFromModal = (newStart: Date, newEnd: Date, newInterval: number) => {
     if (!editingAlarm) return;
 
@@ -432,8 +494,8 @@ export default function App() {
         a.id === editingAlarm.id
           ? {
               ...a,
-              start: newStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              end:   newEnd.toLocaleTimeString([],   { hour: '2-digit', minute: '2-digit' }),
+              start: newStart.toLocaleTimeString([], timeLocaleOpts),
+              end:   newEnd.toLocaleTimeString([],   timeLocaleOpts),
               interval: newInterval,
               count,
             }
@@ -497,7 +559,7 @@ const confirmDeleteAlarmSet = (id: string) => {
                   if (editingAlarmId === id) {
                     setEditingAlarmId(null);
                   }
-                  // NEW: close modal if the alarm being edited is deleted
+                  // close modal if the alarm being edited is deleted
                   if (editingAlarm?.id === id) {
                     setEditingAlarm(null);
                   }
@@ -509,7 +571,7 @@ const confirmDeleteAlarmSet = (id: string) => {
 
     };
 
-  // NEW: derive Date objects from editingAlarm for the modal's initial values
+  // derive Date objects from editingAlarm for the modal's initial values
   const editInitialStart = React.useMemo(() => {
     if (!editingAlarm) return new Date();
     const parts = editingAlarm.start.match(/(\d+):(\d+)\s?(AM|PM)?/i);
@@ -538,7 +600,19 @@ const confirmDeleteAlarmSet = (id: string) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Alarm Flow</Text>
+
+      {/* 24h toggle added to top right */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={styles.title}>Alarm Flow</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ fontSize: 12, color: '#888' }}>{use24Hour ? '24h' : '12h'}</Text>
+          <Switch
+            value={use24Hour}
+            onValueChange={toggleUse24Hour}
+            trackColor={{ false: '#ccc', true: '#4CAF50' }}
+          />
+        </View>
+      </View>
 
       {/* Alarms List */}
       <FlatList
@@ -577,7 +651,7 @@ const confirmDeleteAlarmSet = (id: string) => {
         <Text style={styles.summaryLabel}>Start Time</Text>
         <TouchableOpacity onPress={() => setShowStartPicker(true)}>
           <Text style={styles.timeText}>
-            {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {startTime.toLocaleTimeString([], timeLocaleOpts)}
           </Text>
         </TouchableOpacity>
 
@@ -585,7 +659,7 @@ const confirmDeleteAlarmSet = (id: string) => {
         <Text style={styles.summaryLabel}>End Time</Text>
         <TouchableOpacity onPress={() => setShowEndPicker(true)}>
           <Text style={styles.timeText}>
-            {endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {endTime.toLocaleTimeString([], timeLocaleOpts)}
           </Text>
         </TouchableOpacity>
 
@@ -610,7 +684,7 @@ const confirmDeleteAlarmSet = (id: string) => {
         <DateTimePicker
           value={startTime}
           mode="time"
-          is24Hour={false}
+          is24Hour={use24Hour}
           onChange={(event, selectedDate) => {
             setShowStartPicker(Platform.OS === 'ios');
             if (selectedDate) setStartTime(selectedDate);
@@ -622,7 +696,7 @@ const confirmDeleteAlarmSet = (id: string) => {
         <DateTimePicker
           value={endTime}
           mode="time"
-          is24Hour={false}
+          is24Hour={use24Hour}
           onChange={(event, selectedDate) => {
             setShowEndPicker(Platform.OS === 'ios');
             if (selectedDate) setEndTime(selectedDate);
@@ -653,12 +727,13 @@ const confirmDeleteAlarmSet = (id: string) => {
         </View>
       )}
 
-      {/* NEW: Edit Modal — slides up over the screen when a alarm row is tapped */}
+      {/* slides up over the screen when a alarm row is tapped */}
       <EditModal
         visible={editingAlarm !== null}
         initialStart={editInitialStart}
         initialEnd={editInitialEnd}
         initialInterval={editingAlarm?.interval ?? 10}
+        use24Hour={use24Hour}
         onSave={saveEditAlarmSetFromModal}
         onCancel={() => {
           setEditingAlarm(null);
